@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Optional, Set, Tuple, Callable
 
 from .exceptions import MapValidationError
 from .types import Coord
@@ -140,27 +140,27 @@ class GridMap:
 
     def save_json(self, path: "str | Any") -> None:
         """Convenience wrapper; delegates to io.json_io.save_json."""
-        from src.sapf.io.json_io import save_json as _save_json
+        from ..io.json_io import save_json as _save_json
 
         _save_json(self, path)
 
     @staticmethod
     def load_json(path: "str | Any") -> "GridMap":
         """Convenience wrapper; delegates to io.json_io.load_json."""
-        from src.sapf.io.json_io import load_json as _load_json
+        from ..io.json_io import load_json as _load_json
 
         return _load_json(path)
 
     def save_pickle(self, path: "str | Any") -> None:
         """Convenience wrapper; delegates to io.pickle_io.save_pickle."""
-        from src.sapf.io.pickle_io import save_pickle as _save_pickle
+        from ..io.pickle_io import save_pickle as _save_pickle
 
         _save_pickle(self, path)
 
     @staticmethod
-    def load_pickle(path: "str | Any") -> "GridMap":
+    def load_pickle(path: "str | Any") -> Callable[..., GridMap]:
         """Convenience wrapper; delegates to io.pickle_io.load_pickle."""
-        from src.sapf.io.pickle_io import load_pickle as _load_pickle
+        from ..io.pickle_io import load_pickle as _load_pickle
 
         return _load_pickle
 

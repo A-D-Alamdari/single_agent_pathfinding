@@ -4,7 +4,7 @@ import pickle
 from pathlib import Path
 from typing import Union
 
-from src.sapf.core.map import GridMap
+from ..core.map import GridMap
 
 PathLike = Union[str, Path]
 
