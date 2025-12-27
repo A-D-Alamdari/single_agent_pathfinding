@@ -42,9 +42,9 @@ cd Single_agent_pathfinding
 
 This project requires **Python 3.9+**. It relies on `PySide6` for the GUI and `pydantic` for data validation.
 
-```bash
-This project requires Python 3.9+. It relies on PySide6 for the GUI and pydantic for data validation.
-```
+
+> This project requires Python 3.9+. It relies on PySide6 for the GUI and pydantic for data validation.
+
 
 ----
 

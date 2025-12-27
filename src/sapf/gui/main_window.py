@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+import os
+import glob
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -16,6 +19,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QVBoxLayout,
     QWidget,
+    QComboBox,
 )
 
 from .editor_controller import EditorController
@@ -71,6 +75,10 @@ class MainWindow(QMainWindow):
 
         self.btn_new = QPushButton("New Map")
         self.btn_load = QPushButton("Load Map")
+        self.map_combo = QComboBox()
+        self.map_combo.addItem("Select Preset Map...", None)
+        self.map_combo.setFixedWidth(200)  # Optional: keep it tidy
+
         self.btn_save = QPushButton("Save Map As…")
         self.btn_start = QPushButton("Start")
         self.btn_step = QPushButton("Step")
@@ -101,6 +109,8 @@ class MainWindow(QMainWindow):
         self._build_layout()
         self._wire()
 
+        self._populate_map_list()
+
         # Attach editor to view
         self.editor.attach_to_view(self.grid_view)
         self.editor.mapChanged.connect(self._on_map_edited)
@@ -119,6 +129,8 @@ class MainWindow(QMainWindow):
         top_bar = QHBoxLayout()
         top_bar.addWidget(self.btn_new)
         top_bar.addWidget(self.btn_load)
+        top_bar.addWidget(self.map_combo)
+
         top_bar.addWidget(self.btn_save)
         top_bar.addSpacing(12)
 
@@ -171,6 +183,8 @@ class MainWindow(QMainWindow):
         self.btn_reset.clicked.connect(self._on_reset)
 
         self.speed_spin.valueChanged.connect(self._on_speed_changed)
+
+        self.map_combo.currentIndexChanged.connect(self._on_preset_map_selected)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         self.btn_save.setEnabled(enabled)
@@ -398,3 +412,69 @@ class MainWindow(QMainWindow):
 
     def _on_speed_changed(self, value: int) -> None:
         self.run_controller.set_interval_ms(int(value))
+
+    def _populate_map_list(self) -> None:
+        """Scan the 'maps/' directory and populate the combo box."""
+        # Assume maps dir is in project root, 2 levels up from src/sapf/gui
+        # Adjust path logic if your running directory differs.
+        # Here we assume running from 'src' folder or root, checking relatively.
+
+        possible_paths = [
+            Path("maps"),  # If running from root
+            Path("maps/moving|_ai"),  # If running from root
+            Path("../maps"),  # If running from src
+            Path("../../maps")  # If running from src/sapf
+        ]
+
+        map_dir = None
+        for p in possible_paths:
+            if p.exists() and p.is_dir():
+                map_dir = p
+                break
+
+        if map_dir is None:
+            return
+
+        # Find .map, .json, .pkl files
+        files = sorted(
+            list(map_dir.glob("*.map")) +
+            list(map_dir.glob("*.json")) +
+            list(map_dir.glob("*.pkl"))
+        )
+
+        for f in files:
+            # Store full path in user data
+            self.map_combo.addItem(f.name, userData=str(f.resolve()))
+
+    def _on_preset_map_selected(self, index: int) -> None:
+        """Load the map selected from the dropdown."""
+        if index == 0:
+            return  # The "Select Preset..." placeholder
+
+        path_str = self.map_combo.itemData(index)
+        if not path_str:
+            return
+
+        path = Path(path_str)
+
+        try:
+            suffix = path.suffix.lower()
+            if suffix == ".json":
+                grid_map = GridMap.load_json(path)
+            elif suffix in {".pkl", ".pickle"}:
+                grid_map = GridMap.load_pickle(path)
+            elif suffix == ".map":
+                from ..generator.movingai import load_movingai_map
+                grid_map = load_movingai_map(path)
+            else:
+                return
+
+            self._load_map_into_ui(grid_map, path.name)
+
+            # Reset combo so user can select the same map again if they want
+            self.map_combo.blockSignals(True)
+            self.map_combo.setCurrentIndex(0)
+            self.map_combo.blockSignals(False)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", f"Could not load preset: {e}")
