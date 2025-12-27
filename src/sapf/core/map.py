@@ -12,7 +12,7 @@ def _coerce_coord(value: Any, *, name: str) -> Coord:
         not isinstance(value, (tuple, list))
         or len(value) != 2
         or not isinstance(value[0], int)
-        or not isinstance(value[2], int)
+        or not isinstance(value[1], int)
     ):
         raise MapValidationError(f"{name} must be a 2-tuple/list of ints, got: {value!r}")
     return (int(value[0]), int(value[1]))
