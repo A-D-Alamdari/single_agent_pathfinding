@@ -26,6 +26,8 @@ from ..gui.run_controller import RunController
 from ..gui.widgets.algorithm_picker import AlgorithmPicker
 from ..gui.widgets.log_panel import LogPanel
 from ..gui.widgets.stats_panel import StatsPanel
+from .dialogs.new_map_dialog import NewMapDialog
+from ..generator.movingai import load_movingai_map
 
 
 @dataclass
@@ -67,6 +69,7 @@ class MainWindow(QMainWindow):
         # Controls
         self.algo_picker = AlgorithmPicker(list_algorithms_for_gui())
 
+        self.btn_new = QPushButton("New Map")
         self.btn_load = QPushButton("Load Map")
         self.btn_save = QPushButton("Save Map As…")
         self.btn_start = QPushButton("Start")
@@ -90,6 +93,7 @@ class MainWindow(QMainWindow):
             grid_view=self.grid_view,
             log_panel=self.log_panel,
             status_label=self.status_label,
+            stats_panel=self.stats_panel,
         )
         self.editor = EditorController()
 
@@ -113,6 +117,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         top_bar = QHBoxLayout()
+        top_bar.addWidget(self.btn_new)
         top_bar.addWidget(self.btn_load)
         top_bar.addWidget(self.btn_save)
         top_bar.addSpacing(12)
@@ -138,22 +143,25 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.stats_panel)
         right_layout.addWidget(self.log_panel, stretch=1)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.grid_view)
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.addWidget(self.grid_view)
+        self._splitter.addWidget(right_panel)
+
+        # Default stretch factors (often overridden by content size, so we'll enforce later)
+        self._splitter.setStretchFactor(0, 3)  # Map gets 3 parts
+        self._splitter.setStretchFactor(1, 2)  # Panel gets 1 part
 
         layout = QVBoxLayout(root)
         layout.addLayout(top_bar)
         layout.addWidget(self.mode_label)
         layout.addWidget(self.status_label)
-        layout.addWidget(splitter)
+        layout.addWidget(self._splitter)
 
     # -------------------------
     # Wiring
     # -------------------------
     def _wire(self) -> None:
+        self.btn_new.clicked.connect(self._on_new_map)
         self.btn_load.clicked.connect(self._on_load_map)
         self.btn_save.clicked.connect(self._on_save_map_as)
 
@@ -173,6 +181,41 @@ class MainWindow(QMainWindow):
         self.algo_picker.setEnabled(enabled)
         self.speed_spin.setEnabled(enabled)
 
+    def _on_new_map(self) -> None:
+        dialog = NewMapDialog(self)
+        if dialog.exec():
+            new_map = dialog.get_map()
+            if new_map:
+                self._load_map_into_ui(new_map, "Generated Map")
+
+    def _load_map_into_ui(self, grid_map: GridMap, name: str) -> None:
+        """Helper to centralize map loading logic."""
+        self._ui.grid_map = grid_map
+        self._ui.map_path = None
+
+        # Reset visualization + controllers
+        self.run_controller.reset(clear_log=True)
+        self.stats_panel.reset()
+
+        self.grid_view.set_map(grid_map)
+        self.editor.set_map(grid_map)
+        self.editor.set_enabled(True)
+
+        self.status_label.setText(f"{name} ({grid_map.width}x{grid_map.height})")
+        self._set_controls_enabled(True)
+
+        # --- NEW CODE: FORCE RESIZE ---
+        # Get current window width
+        total_width = self._splitter.width()
+        # Give map 75% of width, panel 25%
+        self._splitter.setSizes([int(total_width * 0.55), int(total_width * 0.45)])
+        # ------------------------------
+
+        if grid_map.start is None or grid_map.goal is None:
+            self.log_panel.append(
+                "Map generated. Use editor keys (s/e) and click to set start/goal."
+            )
+
     # -------------------------
     # Map load/save
     # -------------------------
@@ -181,22 +224,30 @@ class MainWindow(QMainWindow):
             self,
             "Open Map",
             "",
-            "Map files (*.json *.pkl *.pickle);;All files (*.*)",
+            # ADD *.map to the filter string below
+            "Map files (*.json *.pkl *.pickle *.map);;All files (*.*)",
         )
         if not path_str:
             return
 
         path = Path(path_str)
         try:
-            if path.suffix.lower() == ".json":
+            suffix = path.suffix.lower()
+            if suffix == ".json":
                 grid_map = GridMap.load_json(path)
-            elif path.suffix.lower() in {".pkl", ".pickle"}:
+            elif suffix in {".pkl", ".pickle"}:
                 grid_map = GridMap.load_pickle(path)
+            elif suffix == ".map":
+                # ADD THIS BLOCK
+                grid_map = load_movingai_map(path)
             else:
-                raise ValueError("Unsupported extension. Use .json, .pkl, or .pickle.")
+                raise ValueError("Unsupported extension.")
         except Exception as e:
             QMessageBox.critical(self, "Failed to Load Map", str(e))
             return
+
+        # Use the helper we defined earlier
+        self._load_map_into_ui(grid_map, path.name)
 
         self._ui.map_path = path
         self._ui.grid_map = grid_map

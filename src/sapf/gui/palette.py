@@ -28,7 +28,7 @@ class Palette:
 
         return Palette(
             empty=QBrush(Qt.GlobalColor.white),
-            obstacle=QBrush(Qt.GlobalColor.darkGray),
+            obstacle=QBrush(Qt.GlobalColor.black),
             start=QBrush(Qt.GlobalColor.green),
             goal=QBrush(Qt.GlobalColor.red),
             open_set=QBrush(Qt.GlobalColor.cyan),  # blue-ish

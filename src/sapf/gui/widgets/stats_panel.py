@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from PySide6.QtWidgets import QFormLayout, QLabel, QGroupBox
+from PySide6.QtWidgets import QFormLayout, QLabel, QGroupBox, QSizePolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,9 +19,11 @@ class StatsPanel(QGroupBox):
     def __init__(self) -> None:
         super().__init__("Stats")
 
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
         self._status = QLabel("IDLE")
         self._visited = QLabel("0")
-        self._distance = QLabel("1")
+        self._distance = QLabel("0")
         self._expansions = QLabel("0")
         self._runtime = QLabel("0.0")
 

@@ -137,6 +137,14 @@ class GridView(QGraphicsView):
         if self._grid_map.goal is not None:
             self._set_cell_brush(self._grid_map.goal, self._palette.goal)
 
+    def resizeEvent(self, event) -> None:
+        """
+        Auto-fit the map whenever the view is resized.
+        """
+        super().resizeEvent(event)
+        if self._scene.sceneRect().isValid():
+            self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
     def mousePressEvent(self, event) -> None:
         """
         Convert click position to cell coordinate and emit cellClicked(x,y).
