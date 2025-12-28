@@ -4,7 +4,7 @@
 [![PEP8](https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/)
 ![Status](https://img.shields.io/badge/status-educational-orange)
 
-# Single Agent Pathfinding (SAPF)
+# Single Agent Pathfinding (SAPF) Visualizer
 
 A modular, visualization-focused Python library for single-agent pathfinding algorithms. This repository provides a robust core architecture, a modern Qt-based GUI for real-time visualization, and support for standard benchmark formats (MovingAI).
 
