@@ -6,10 +6,21 @@ from typing import Dict, List, Optional, Type
 from ..algorithms.base import PathfindingAlgorithm
 
 # Built-in algorithms
-from ..algorithms.informed.astar import AStarAlgorithm
+# Informed Algorithms -----------------------------------
 from ..algorithms.uninformed.bfs import BFS4
 from ..algorithms.uninformed.dijkstra import Dijkstra4
 from ..algorithms.uninformed.dfs import DFS4
+
+# Uninformed Algorithms ---------------------------------
+from ..algorithms.informed.astar import AStarAlgorithm
+from ..algorithms.informed.greedy_best_first import GreedyBestFirstAlgorithm
+from ..algorithms.informed.weighted_astar import WeightedAStarAlgorithm
+
+# Incremental Algorithms --------------------------------
+from ..algorithms.incremental.dstar_lite import DStarLiteAlgorithm
+
+# Graph-Based Algorithms --------------------------------
+from ..algorithms.graph_based.bellman_ford import BellmanFordAlgorithm
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +85,14 @@ class AlgorithmRegistry:
 
             # Informed
             AlgorithmSpec("astar", "A* (Manhattan)", "Informed", AStarAlgorithm),
+            AlgorithmSpec("greedy", "Greedy Best-First", "Informed", GreedyBestFirstAlgorithm),
+            AlgorithmSpec("wastar", "Weighted A* (w=1.5)", "Informed", WeightedAStarAlgorithm),
+
+            # Incremental
+            AlgorithmSpec("dstarlite", "D* Lite", "Incremental", DStarLiteAlgorithm),
+
+            # Graph-Based
+            AlgorithmSpec("bellmanford", "Bellman-Ford", "Graph-Based", BellmanFordAlgorithm),
         ]
 
         for spec in specs:
