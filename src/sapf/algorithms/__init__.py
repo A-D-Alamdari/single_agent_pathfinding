@@ -6,10 +6,10 @@ from .base import (
     SearchStep,
 )
 from .utils import reconstruct_path
-from .astar import AStarAlgorithm
-from .bfs import BFS4
-from .dijkstra import Dijkstra4
-from .dfs import DFS4
+from ..algorithms.informed.astar import AStarAlgorithm
+from ..algorithms.uninformed.bfs import BFS4
+from ..algorithms.uninformed.dijkstra import Dijkstra4
+from ..algorithms.uninformed.dfs import DFS4
 from .registry import (
     AlgorithmRegistry,
     AlgorithmSpec,

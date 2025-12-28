@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
 # FIXED: Ensure SearchStep/SearchStatus are imported from the base (which gets them from core)
-from ..algorithms.base import PathfindingAlgorithm, SearchStatus, SearchStep
-from ..algorithms.utils import reconstruct_path
-from ..core.map import GridMap
-from ..core.types import Coord
+from ...algorithms.base import PathfindingAlgorithm, SearchStatus, SearchStep
+from ...algorithms.utils import reconstruct_path
+from ...core.map import GridMap
+from ...core.types import Coord
 
 
 @dataclass(frozen=True, slots=True)

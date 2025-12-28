@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, Iterator, List, Optional, Sequence, Set
+from collections import deque
+from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set
 
-from ..algorithms.base import PathfindingAlgorithm, SearchStatus, SearchStep
-from ..algorithms.utils import reconstruct_path
-from ..core.map import GridMap
-from ..core.types import Coord
+from ...algorithms.base import PathfindingAlgorithm, SearchStatus, SearchStep
+from ...algorithms.utils import reconstruct_path
+from ...core.map import GridMap
+from ...core.types import Coord
 
 
 def _neighbors_4(c: Coord) -> Sequence[Coord]:
@@ -13,14 +14,14 @@ def _neighbors_4(c: Coord) -> Sequence[Coord]:
     return ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
 
 
-class DFS4(PathfindingAlgorithm):
+class BFS4(PathfindingAlgorithm):
     @property
     def name(self) -> str:
-        return "DFS (4-neighborhood)"
+        return "BFS (4-neighborhood)"
 
     def find_path(self, grid_map: GridMap, *, step_mode: bool):
         if grid_map.start is None or grid_map.goal is None:
-            raise ValueError("DFS requires both start and goal to be set")
+            raise ValueError("BFS requires both start and goal to be set")
 
         start = grid_map.start
         goal = grid_map.goal
@@ -41,13 +42,13 @@ class DFS4(PathfindingAlgorithm):
             return [start]
 
         def _run_steps() -> Iterator[SearchStep]:
-            stack: List[Coord] = [start]
+            q: Deque[Coord] = deque([start])
             in_open: Set[Coord] = {start}
             closed: Set[Coord] = set()
             came_from: Dict[Coord, Coord] = {}
 
-            while stack:
-                current = stack.pop()
+            while q:
+                current = q.popleft()
                 in_open.discard(current)
 
                 if current in closed:
@@ -55,14 +56,14 @@ class DFS4(PathfindingAlgorithm):
 
                 closed.add(current)
 
-                log_lines: List[str] = [f"Expanding {current} (DFS)."]
+                log_lines: List[str] = [f"Expanding {current} (BFS)."]
                 open_added: List[Coord] = []
 
                 if current == goal:
                     path = reconstruct_path(came_from, goal)
                     yield SearchStep(
                         current=current,
-                        open_set=stack.copy(),
+                        open_set=list(q),
                         closed_set=sorted(closed),
                         open_added=[],
                         best_path=path,
@@ -71,26 +72,25 @@ class DFS4(PathfindingAlgorithm):
                     )
                     return
 
-                # For DFS, pushing neighbors in reverse order affects traversal deterministically.
-                # Keep it consistent with BFS neighbor order by reversing at push time.
-                nbs = list(_neighbors_4(current))
-                for nb in reversed(nbs):
+                for nb in _neighbors_4(current):
                     if not grid_map.in_bound(nb) or grid_map.is_blocked(nb) or nb in closed:
                         continue
                     if nb in in_open:
                         continue
                     came_from[nb] = current
-                    stack.append(nb)
+                    q.append(nb)
                     in_open.add(nb)
                     open_added.append(nb)
-                    log_lines.append(f"  Pushed neighbor {nb}.")
+                    log_lines.append(f"  Enqueued neighbor {nb}.")
 
+                open_snapshot = list(q)
+                closed_snapshot = sorted(closed)
                 best_path: Optional[List[Coord]] = [start] if current == start else reconstruct_path(came_from, current)
 
                 yield SearchStep(
                     current=current,
-                    open_set=stack.copy(),
-                    closed_set=sorted(closed),
+                    open_set=open_snapshot,
+                    closed_set=closed_snapshot,
                     open_added=open_added,
                     best_path=best_path,
                     log="\n".join(log_lines),
@@ -103,7 +103,7 @@ class DFS4(PathfindingAlgorithm):
                 closed_set=sorted(closed),
                 open_added=[],
                 best_path=[start],
-                log="Stack exhausted. No path exists to goal.",
+                log="Queue exhausted. No path exists to goal.",
                 status=SearchStatus.NO_PATH,
             )
 
