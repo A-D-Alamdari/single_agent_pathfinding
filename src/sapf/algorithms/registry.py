@@ -22,6 +22,9 @@ from ..algorithms.incremental.dstar_lite import DStarLiteAlgorithm
 # Graph-Based Algorithms --------------------------------
 from ..algorithms.graph_based.bellman_ford import BellmanFordAlgorithm
 
+# Optimization Algorithms -------------------------------
+from ..algorithms.optimization.genetic_algorithm import GeneticPathfindingAlgorithm
+
 
 @dataclass(frozen=True, slots=True)
 class AlgorithmSpec:
@@ -93,6 +96,9 @@ class AlgorithmRegistry:
 
             # Graph-Based
             AlgorithmSpec("bellmanford", "Bellman-Ford", "Graph-Based", BellmanFordAlgorithm),
+
+            # Optimization
+            AlgorithmSpec("genetic", "Genetic Algorithm", "Optimization", GeneticPathfindingAlgorithm),
         ]
 
         for spec in specs:
