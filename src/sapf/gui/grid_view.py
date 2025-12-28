@@ -15,9 +15,6 @@ from ..gui.palette import Palette
 class GridView(QGraphicsView):
     """
     QGraphicsView grid renderer + click-to-cell detection.
-
-    - Emits cellClicked(x,y) on mouse clicks.
-    - Receives keyboard focus for editor modes (s/e/o/x handled by EditorController).
     """
 
     cellClicked = Signal(int, int)
@@ -29,8 +26,6 @@ class GridView(QGraphicsView):
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-
-        # Important: allow key focus so s/e/o/x reaches EditorController eventFilter
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self._scene = QGraphicsScene(self)
@@ -41,9 +36,14 @@ class GridView(QGraphicsView):
 
         self._palette = Palette.default()
 
+    def resizeEvent(self, event) -> None:
+        """Auto-fit the map whenever the view is resized."""
+        super().resizeEvent(event)
+        if self._scene.sceneRect().isValid():
+            self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
     def set_palette(self, palette: Palette) -> None:
         self._palette = palette
-        # repaint if a map is present
         if self._grid_map is not None:
             self.set_map(self._grid_map)
 
@@ -53,6 +53,15 @@ class GridView(QGraphicsView):
         self._cells.clear()
 
         w, h = grid_map.width, grid_map.height
+
+        # --- FIX START: Explicitly set the scene bounds ---
+        # This forces the scene to "forget" any previous large map size
+        # and shrink/grow exactly to the new map's dimensions.
+        total_w = w * self.CELL_SIZE
+        total_h = h * self.CELL_SIZE
+        self._scene.setSceneRect(0, 0, total_w, total_h)
+        # --- FIX END ---
+
         for y in range(h):
             for x in range(w):
                 rect = QRectF(
@@ -68,6 +77,9 @@ class GridView(QGraphicsView):
                 self._cells[(x, y)] = item
 
         self._apply_base_layer()
+
+        # Reset any previous zoom/transform before fitting
+        self.resetTransform()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def clear_overlays(self) -> None:
@@ -103,53 +115,29 @@ class GridView(QGraphicsView):
 
         self.clear_overlays()
 
-        # Closed set
         for c in closed_set:
             if c not in (self._grid_map.start, self._grid_map.goal):
                 self._set_cell_brush(c, self._palette.closed_set)
 
-        # Open set
         for c in open_set:
             if c not in (self._grid_map.start, self._grid_map.goal):
                 self._set_cell_brush(c, self._palette.open_set)
 
-        # Path rendering depends on status
-        if status == SearchStatus.RUNNING and best_path is not None:
-            # best-so-far path
+        if best_path is not None:
             for c in best_path:
                 if c not in (self._grid_map.start, self._grid_map.goal):
                     self._set_cell_brush(c, self._palette.path)
 
-        elif status == SearchStatus.FOUND and best_path is not None:
-            # final path
-            for c in best_path:
-                if c not in (self._grid_map.start, self._grid_map.goal):
-                    self._set_cell_brush(c, self._palette.path)
-
-        # Highlight current node ONLY while running
         if status == SearchStatus.RUNNING:
             if current not in (self._grid_map.start, self._grid_map.goal):
                 self._set_cell_brush(current, self._palette.current)
 
-        # Re-apply start/goal last
         if self._grid_map.start is not None:
             self._set_cell_brush(self._grid_map.start, self._palette.start)
         if self._grid_map.goal is not None:
             self._set_cell_brush(self._grid_map.goal, self._palette.goal)
 
-    def resizeEvent(self, event) -> None:
-        """
-        Auto-fit the map whenever the view is resized.
-        """
-        super().resizeEvent(event)
-        if self._scene.sceneRect().isValid():
-            self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-
     def mousePressEvent(self, event) -> None:
-        """
-        Convert click position to cell coordinate and emit cellClicked(x,y).
-        """
-        # Ensure we have focus so key presses go to the view
         self.setFocus(Qt.FocusReason.MouseFocusReason)
 
         if self._grid_map is None:
