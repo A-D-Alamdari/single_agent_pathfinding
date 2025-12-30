@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
-from PySide6.QtCore import Qt
+import io
+from PIL import Image
+
+from PySide6.QtCore import Qt,  QBuffer, QIODevice
+from PySide6.QtGui import QPixmap
+
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -16,7 +21,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QVBoxLayout,
-    QWidget,
+    QWidget, QCheckBox, QApplication,
 )
 
 from .dialogs.new_map_dialog import NewMapDialog
@@ -49,6 +54,11 @@ class MainWindow(QMainWindow):
         self._ui = _UiState()
         self._algos = create_algorithms()
 
+        # --- GIF Recording State ---
+        self._frames: List[QPixmap] = []
+        self._is_recording = False
+        # ---------------------------
+
         # --- FIX: This flag prevents the window from shrinking on every map load ---
         self._layout_initialized = False
         # -------------------------------------------------------------------------
@@ -74,6 +84,11 @@ class MainWindow(QMainWindow):
         self.btn_step = QPushButton("Step")
         self.btn_stop = QPushButton("Stop")
         self.btn_reset = QPushButton("Reset")
+
+        # --- Recording Checkbox ---
+        self.chk_record = QCheckBox("Record GIF")
+        self.chk_record.setStyleSheet("color: #e91e63; font-weight: bold;")
+        # --------------------------
 
         self.speed_label = QLabel("Speed (ms/step):")
         self.speed_spin = QSpinBox()
@@ -126,6 +141,8 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.algo_picker)
         top_bar.addSpacing(12)
 
+        top_bar.addWidget(self.chk_record)
+        top_bar.addSpacing(5)
         top_bar.addWidget(self.btn_start)
         top_bar.addWidget(self.btn_step)
         top_bar.addWidget(self.btn_stop)
@@ -172,6 +189,13 @@ class MainWindow(QMainWindow):
 
         self.speed_spin.valueChanged.connect(self._on_speed_changed)
 
+        # --- Connect Recording Signals ---
+        # NOTE: RunController must emit 'stepExecuted' and 'finished' signals!
+        if hasattr(self.run_controller, 'stepExecuted'):
+            self.run_controller.stepExecuted.connect(self._on_step_executed)
+        if hasattr(self.run_controller, 'finished'):
+            self.run_controller.finished.connect(self._on_run_finished)
+
     def _set_controls_enabled(self, enabled: bool) -> None:
         self.btn_save.setEnabled(enabled)
         self.btn_start.setEnabled(enabled)
@@ -180,6 +204,7 @@ class MainWindow(QMainWindow):
         self.btn_reset.setEnabled(enabled)
         self.algo_picker.set_enabled(enabled)
         self.speed_spin.setEnabled(enabled)
+        self.chk_record.setEnabled(enabled)
 
     # -------------------------
     # Map Presets
@@ -361,21 +386,21 @@ class MainWindow(QMainWindow):
             return
 
         if self._ui.grid_map.start is None or self._ui.grid_map.goal is None:
-            QMessageBox.warning(
-                self,
-                "Missing Start/Goal",
-                "Please set both start and goal using the editor:\n"
-                "Press 's' then click for start, 'e' then click for goal.",
-            )
+            QMessageBox.warning(self, "Missing Start/Goal", "Please set both start and goal.")
             return
 
         algo_key = self.algo_picker.current_key()
         algo = self._algos.get(algo_key)
         if algo is None:
-            QMessageBox.critical(self, "Algorithm Error", f"Algorithm '{algo_key}' not available.")
+            QMessageBox.critical(self, "Error", f"Algorithm '{algo_key}' not available.")
             return
 
+        # Prepare Recording
+        self._frames = []
+        self._is_recording = self.chk_record.isChecked()
+
         self.editor.set_enabled(False)
+        self.chk_record.setEnabled(False)  # Lock checkbox while running
 
         try:
             self.run_controller.start(
@@ -383,8 +408,14 @@ class MainWindow(QMainWindow):
                 grid_map=self._ui.grid_map,
                 interval_ms=int(self.speed_spin.value()),
             )
+            # Capture first frame (initial state)
+            if self._is_recording:
+                QApplication.processEvents()  # Ensure start is rendered
+                self._frames.append(self.grid_view.grab())
+
         except Exception as e:
             self.editor.set_enabled(True)
+            self.chk_record.setEnabled(True)
             QMessageBox.critical(self, "Run Error", str(e))
             return
 
@@ -398,10 +429,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Start/Goal", "Set start and goal first (s/e + click).")
             return
 
+        # Manual step recording
+        is_recording_manual = self.chk_record.isChecked()
+
         self.editor.set_enabled(False)
 
         try:
             self.run_controller.step_once()
+
+            # If recording is checked, capture manual steps too
+            if is_recording_manual:
+                self._frames.append(self.grid_view.grab())
+
         except Exception as e:
             self.editor.set_enabled(True)
             QMessageBox.critical(self, "Step Error", str(e))
@@ -410,6 +449,12 @@ class MainWindow(QMainWindow):
     def _on_stop(self) -> None:
         self.run_controller.stop()
         self.editor.set_enabled(True)
+        self.chk_record.setEnabled(True)
+
+        # If we were recording, stop and save
+        if self._is_recording:
+            self._on_run_finished()
+
         self.status_label.setText("Stopped.")
         self.log_panel.append("Run stopped. Editing enabled.")
 
@@ -417,6 +462,9 @@ class MainWindow(QMainWindow):
         self.run_controller.reset(clear_log=True)
         self.stats_panel.reset()
         self.editor.set_enabled(True)
+        self.chk_record.setEnabled(True)
+        self.chk_record.setChecked(False)
+        self._frames = []  # discard frames
 
         if self._ui.grid_map is not None:
             self.grid_view.set_map(self._ui.grid_map)
@@ -427,3 +475,72 @@ class MainWindow(QMainWindow):
 
     def _on_speed_changed(self, value: int) -> None:
         self.run_controller.set_interval_ms(int(value))
+
+
+    # -------------------------
+    # Recording Logic
+    # -------------------------
+    def _on_step_executed(self) -> None:
+        """Called automatically by RunController after every step."""
+        if self._is_recording:
+            # === FIX: Force the view to repaint immediately before capturing ===
+            # Without this, 'grab()' captures the old state because the
+            # paint event hasn't processed yet.
+            self.grid_view.repaint()
+            # =================================================================
+
+            # Grab exactly what the grid view shows
+            pixmap = self.grid_view.grab()
+            self._frames.append(pixmap)
+
+    def _on_run_finished(self) -> None:
+        """Called when RunController finishes or stops."""
+        if self._is_recording and self._frames:
+            self._save_gif()
+            self._is_recording = False
+            self.chk_record.setChecked(False) # Reset UI
+            self._frames = [] # Clear memory
+            self.log_panel.append("Recording finished.")
+
+    def _save_gif(self) -> None:
+        if not self._frames:
+            return
+
+        self.log_panel.append("Processing GIF... (Please wait)")
+        # Allow UI to redraw the log message
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
+
+        try:
+            pil_images = []
+            for pixmap in self._frames:
+                # Convert QPixmap -> Bytes -> PIL Image
+                buffer = QBuffer()
+                buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+                pixmap.save(buffer, "PNG")
+                pil_im = Image.open(io.BytesIO(buffer.data().data()))
+                pil_images.append(pil_im)
+
+            path_str, _ = QFileDialog.getSaveFileName(
+                self, "Save Recording", "search_demo.gif", "GIF Files (*.gif)"
+            )
+
+            if path_str:
+                # Use current speed setting for GIF duration
+                duration = self.speed_spin.value()
+                pil_images[0].save(
+                    path_str,
+                    save_all=True,
+                    append_images=pil_images[1:],
+                    optimize=True,
+                    duration=duration,
+                    loop=0
+                )
+                self.log_panel.append(f"GIF saved: {path_str}")
+                QMessageBox.information(self, "Success", f"Saved to {path_str}")
+            else:
+                self.log_panel.append("GIF save cancelled.")
+
+        except Exception as e:
+            self.log_panel.append(f"Error saving GIF: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to save GIF: {e}")
